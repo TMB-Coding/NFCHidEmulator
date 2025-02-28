@@ -1,4 +1,19 @@
 {
-  "name": "ACR122U_Emulator",
-  "packageManager": "yarn@4.4.1"
+  "name": "acr122u_emulator",
+  "packageManager": "yarn@4.4.1",
+  "dependencies": {
+    "ndef": "^0.2.0",
+    "nfc-pcsc": "^0.8.1",
+    "pcsclite": "^1.0.1",
+    "robot": "^0.3.0",
+    "robotjs": "^0.6.0"
+  },
+  "main": "index.js",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC"
 }
