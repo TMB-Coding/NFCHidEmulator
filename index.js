@@ -1,30 +1,46 @@
 // High-speed Node.js script to read NDEF text records and emulate keyboard input
-// Install dependencies with: npm install nfc-pcsc ndef robotjs
+// Install dependencies with: npm install nfc-pcsc ndef @nut-tree/nut-js
 
 const { NFC } = require("nfc-pcsc");
 const ndef = require("ndef");
-const robot = require("robotjs");
+const { keyboard, Key } = require("@nut-tree-fork/nut-js");
 const nfc = new NFC();
+
+// Configure NutJS for maximum speed
+keyboard.config.autoDelayMs = 0;
 
 // Configuration - optimized for speed
 const config = {
-  typingSpeed: 0, // No delay between keystrokes for maximum speed
   startDelay: 10, // Minimal delay before typing starts (ms)
   autoEnter: true, // Press Enter after typing
 };
+
+// Track last processed card to prevent duplicate processing
+let lastProcessedCard = null;
+let processingCard = false;
 
 /**
  * Read and parse NDEF records from an NFC tag, then type as keyboard input
  */
 function emulateKeyboardFromNFC() {
-  console.log("High-Speed NFC Text-to-Keyboard Emulator");
+  console.log("High-Speed NFC Text-to-Keyboard Emulator (NutJS version)");
   console.log("Waiting for NFC tags... (Press Ctrl+C to exit)");
 
   nfc.on("reader", (reader) => {
     console.log(`Reader connected: ${reader.reader.name}`);
 
     reader.on("card", async (card) => {
-      console.log(`Card detected: ${card.uid}`);
+      const cardId = card.uid;
+      console.log(`Card detected: ${cardId}`);
+
+      // Prevent duplicate processing or concurrent processing
+      if (processingCard || lastProcessedCard === cardId) {
+        console.log("Ignoring duplicate card or concurrent processing");
+        return;
+      }
+
+      processingCard = true;
+      lastProcessedCard = cardId;
 
       try {
         // Simple read without authentication
@@ -38,6 +54,7 @@ function emulateKeyboardFromNFC() {
 
         if (!ndefData) {
           console.log("No valid NDEF data found.");
+          processingCard = false;
           return;
         }
 
@@ -49,6 +66,7 @@ function emulateKeyboardFromNFC() {
 
         if (textRecords.length === 0) {
           console.log("No text records found.");
+          processingCard = false;
           return;
         }
 
@@ -58,13 +76,28 @@ function emulateKeyboardFromNFC() {
 
         // Type immediately
         console.log("Typing text...");
-        typeText(text, config.autoEnter);
+        await typeText(text, config.autoEnter);
+
+        // Reset processing flag after a short delay to prevent bouncing
+        setTimeout(() => {
+          processingCard = false;
+          console.log("Ready for next card");
+        }, 1000);
       } catch (err) {
         console.error(`Error: ${err.message}`);
+        processingCard = false;
       }
     });
 
     reader.on("error", (err) => console.error(`Reader error: ${err}`));
+
+    // Handle card removal to reset the lastProcessedCard
+    reader.on("card.off", (card) => {
+      console.log(`Card removed: ${card.uid}`);
+      if (lastProcessedCard === card.uid) {
+        lastProcessedCard = null;
+      }
+    });
   });
 
   nfc.on("error", (err) => console.error(`NFC error: ${err}`));
@@ -101,43 +134,54 @@ function findNdefData(data) {
 }
 
 /**
- * Type text using keyboard emulation at maximum speed
+ * Type text using NutJS keyboard emulation at maximum speed
  * @param {string} text - Text to type
  * @param {boolean} pressEnter - Whether to press Enter after typing
+ * @returns {Promise} - Resolves when typing is complete
  */
-function typeText(text, pressEnter = false) {
-  setTimeout(() => {
-    // Process all characters as fast as possible
-    let i = 0;
-    const type = () => {
-      while (i < text.length) {
-        const char = text[i++];
+async function typeText(text, pressEnter = false) {
+  return new Promise(async (resolve) => {
+    setTimeout(async () => {
+      try {
+        // Clear any previous input
+        await keyboard.pressKey(Key.Escape);
+        await keyboard.releaseKey(Key.Escape);
 
-        // Press Tab when forward slash is encountered
-        if (char === "/") {
-          robot.keyTap("tab");
-        }
-        // Otherwise type the character normally
-        else {
-          robot.typeString(char);
+        // Process text in chunks to prevent any potential buffer issues
+        const chunkSize = 50;
+        for (let i = 0; i < text.length; i += chunkSize) {
+          const chunk = text.slice(i, i + chunkSize);
+
+          for (let j = 0; j < chunk.length; j++) {
+            const char = chunk[j];
+
+            // Press Tab when forward slash is encountered
+            if (char === "/") {
+              await keyboard.pressKey(Key.Tab);
+              await keyboard.releaseKey(Key.Tab);
+            } else {
+              // Otherwise type the character
+              await keyboard.type(char);
+            }
+          }
+
+          // Small yield to prevent potential issues with long texts
+          await new Promise((resolve) => setImmediate(resolve));
         }
 
-        // Process in small batches to prevent blocking
-        if (i % 10 === 0) {
-          setImmediate(type);
-          return;
+        // Press Enter if requested
+        if (pressEnter) {
+          await keyboard.pressKey(Key.Enter);
+          await keyboard.releaseKey(Key.Enter);
         }
+
+        resolve();
+      } catch (error) {
+        console.error("Error during typing:", error);
+        resolve();
       }
-
-      // Press Enter if requested
-      if (pressEnter) {
-        robot.keyTap("enter");
-      }
-    };
-
-    // Start typing
-    type();
-  }, config.startDelay);
+    }, config.startDelay);
+  });
 }
 
 // Start the script

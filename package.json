@@ -2,11 +2,10 @@
   "name": "acr122u_emulator",
   "packageManager": "yarn@4.4.1",
   "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.4",
     "ndef": "^0.2.0",
     "nfc-pcsc": "^0.8.1",
-    "pcsclite": "^1.0.1",
-    "robot": "^0.3.0",
-    "robotjs": "^0.6.0"
+    "pcsclite": "^1.0.1"
   },
   "main": "index.js",
   "version": "1.0.0",
